@@ -130,7 +130,7 @@ def print_results(label, results, show_distances=False):
 print("\n--- EXERCISE 1: Basic metadata filter ---")
 
 # Write your code here:
-
+print(collection.get(where={"category": "vpn"}))
 
 # ---------------------------------------------------------------------------
 # EXERCISE 2 — Combining filters with $and and $or
@@ -143,7 +143,7 @@ print("\n--- EXERCISE 1: Basic metadata filter ---")
 print("\n--- EXERCISE 2: Combined metadata filters ---")
 
 # Write your code here:
-
+print(collection.get(where={"$and": [{"priority": "high"}, {"year": 2025}, {"verified": True}]}))
 
 # ---------------------------------------------------------------------------
 # EXERCISE 3 — Full text search with where_document
@@ -157,7 +157,9 @@ print("\n--- EXERCISE 2: Combined metadata filters ---")
 print("\n--- EXERCISE 3: Full text search ---")
 
 # Write your code here:
+print(collection.get(where_document={"$contains": "student"}))
 
+print(collection.get(where_document={"$and": [{"$contains": "student"}, {"$not_contains": "password"}]}))
 
 # ---------------------------------------------------------------------------
 # EXERCISE 4 — Combining semantic query with metadata and text filters
@@ -172,3 +174,8 @@ print("\n--- EXERCISE 3: Full text search ---")
 print("\n--- EXERCISE 4: Semantic query + metadata filter + text filter ---")
 
 # Write your code here:
+print(collection.query(
+    query_texts=["how do I print documents on campus"],
+    where={"category": "printing"},
+    where_document={"$contains": "page"}
+))

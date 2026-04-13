@@ -124,7 +124,7 @@ def retrieve(state: State) -> dict:
     """Retrieve the most relevant creatures via ChromaDB similarity search."""
     docs = retriever.invoke(state["query"])
 
-    #print([doc.page_content for doc in docs])  # debug print to see retrieved documents
+    print([doc.page_content for doc in docs])  # debug print to see retrieved documents
 
     return {"context": [doc.page_content for doc in docs]}
 
@@ -173,6 +173,7 @@ queries = [
     "What creatures live in dark or shadowy environments?",
     "Which creature is the most dangerous and what are its abilities?",
     "Tell me about the Murkwraith",
+    "What creature is cutest?"
 ]
 
 for query in queries:
