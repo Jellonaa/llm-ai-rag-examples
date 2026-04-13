@@ -2,6 +2,8 @@ from langchain.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI 
 
 messages = [
+    ## The system message is usually passed in as the first of a sequence of input messages.
+    ## It is used to set the behavior of the assistant, and can be used to provide instructions, context, or other information that the assistant should take into account when generating its response.
     SystemMessage(content="You are a helpful assistant who is expert telling jokes involving animals."),
     AIMessage(content="Hello, how can I assist you today?"),
     HumanMessage(content="Can you tell me a joke?"),
