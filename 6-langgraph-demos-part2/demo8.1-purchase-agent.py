@@ -20,6 +20,7 @@ Between the two runs the Python process exits completely.  The full agent
 state (vendor data, pricing, chosen quote) survives on disk in SQLite.
 """
 
+import re
 import sys
 import os
 import sqlite3
@@ -30,6 +31,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import interrupt, Command
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.prebuilt import ToolNode, tools_condition
 
 # ─── State ────────────────────────────────────────────────────────────────────
 
@@ -43,17 +45,31 @@ class ProcurementState(TypedDict):
     notification: str
 
 
+# tools
+
+def get_unit_price(vendor: str) -> float:
+    """Tool function for getting the unit price of laptops from different vendors"""
+    if vendor == "Dell":
+        return 248
+    if vendor == "Lenovo":
+        return 235
+    if vendor == "HP":
+        return 259
+
 # ─── LLM (used only for the notification step to make it feel "agentic") ─────
+
+tools = [get_unit_price]
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite")
 
+llm = llm.bind_tools(tools)
 
 # ─── Node functions ──────────────────────────────────────────────────────────
 
 def lookup_vendors(state: ProcurementState) -> dict:
     """Step 1: Look up approved vendors for laptops."""
     print("\n[Step 1] Looking up approved vendors...")
-    time.sleep(1)  # simulate API call
+    #time.sleep(1)  # simulate API call
     vendors = [
         {"name": "Dell", "id": "V-001", "category": "laptops", "rating": 4.5},
         {"name": "Lenovo", "id": "V-002", "category": "laptops", "rating": 4.3},
@@ -67,12 +83,23 @@ def lookup_vendors(state: ProcurementState) -> dict:
 def fetch_pricing(state: ProcurementState) -> dict:
     """Step 2: Fetch current pricing from all 3 suppliers."""
     print("\n[Step 2] Fetching pricing from suppliers...")
-    time.sleep(1.5)  # simulate multiple API calls
+    
+    quantity = int(re.search(r'\b(\d+)\b', state.get("request")).group(1))
+    
+    #time.sleep(1.5)  # simulate multiple API calls
     quotes = [
-        {"vendor": "Dell", "unit_price": 248, "total": 12_400, "delivery_days": 5},
-        {"vendor": "Lenovo", "unit_price": 235, "total": 11_750, "delivery_days": 7},
-        {"vendor": "HP", "unit_price": 259, "total": 12_950, "delivery_days": 4},
+        #{"vendor": "Dell", "unit_price": 248, "total": 12_400, "delivery_days": 5},
+        #{"vendor": "Lenovo", "unit_price": 235, "total": 11_750, "delivery_days": 7},
+        #{"vendor": "HP", "unit_price": 259, "total": 12_950, "delivery_days": 4},
+        {"vendor": "Dell", "unit_price": 0, "total": 0, "delivery_days": 5},
+        {"vendor": "Lenovo", "unit_price": 0, "total": 0, "delivery_days": 7},
+        {"vendor": "HP", "unit_price": 0, "total": 0, "delivery_days": 4},
     ]
+    
+    for x in quotes:
+        x["unit_price"] = get_unit_price(x["vendor"])
+        x["total"] = get_unit_price(x["vendor"]) * quantity
+    
     for q in quotes:
         print(f"   {q['vendor']}: €{q['unit_price']}/unit x 50 = €{q['total']:,} "
               f"({q['delivery_days']} day delivery)")
@@ -82,12 +109,20 @@ def fetch_pricing(state: ProcurementState) -> dict:
 def compare_quotes(state: ProcurementState) -> dict:
     """Step 3: Compare quotes and pick the best one."""
     print("\n[Step 3] Comparing quotes...")
-    time.sleep(0.5)
+    #time.sleep(0.5)
     best = min(state["quotes"], key=lambda q: q["total"])
     print(f"   Best quote: {best['vendor']} at €{best['total']:,}")
     print(f"   (Saves €{max(q['total'] for q in state['quotes']) - best['total']:,} "
           f"vs most expensive option)")
+    if best["total"] < 10000:
+        return {"best_quote": best, "approval_status": "approved"}
     return {"best_quote": best}
+    
+def route_after_compare(state: ProcurementState) -> dict:
+    best = state["best_quote"]
+    if best["total"] > 10000:
+        return "request_approval"
+    return "submit_purchase_order"
 
 
 def request_approval(state: ProcurementState) -> dict:
@@ -116,8 +151,14 @@ def request_approval(state: ProcurementState) -> dict:
     })
 
     print(f"\n[Step 4] Manager responded: {decision}")
+    if "reject" in decision.lower():
+        return {"approval_status": decision, "po_number": "REJECTED"}
     return {"approval_status": decision}
 
+def check_approval(state: ProcurementState) -> dict:
+    if "reject" in state["approval_status"].lower():
+        return "notify_employee"
+    return "submit_purchase_order"
 
 def submit_purchase_order(state: ProcurementState) -> dict:
     """Step 5: Submit the purchase order to the ERP system."""
@@ -126,7 +167,7 @@ def submit_purchase_order(state: ProcurementState) -> dict:
         return {"po_number": "REJECTED"}
 
     print("\n[Step 5] Submitting purchase order to ERP system...")
-    time.sleep(1)
+    #time.sleep(1)
     po_number = "PO-2026-00342"
     print(f"   Purchase order created: {po_number}")
     print(f"   Vendor: {state['best_quote']['vendor']}")
@@ -170,6 +211,9 @@ builder = StateGraph(ProcurementState)
 
 builder.add_node("lookup_vendors", lookup_vendors)
 builder.add_node("fetch_pricing", fetch_pricing)
+
+builder.add_node("tools", ToolNode(tools))
+
 builder.add_node("compare_quotes", compare_quotes)
 builder.add_node("request_approval", request_approval)
 builder.add_node("submit_purchase_order", submit_purchase_order)
@@ -177,9 +221,19 @@ builder.add_node("notify_employee", notify_employee)
 
 builder.add_edge(START, "lookup_vendors")
 builder.add_edge("lookup_vendors", "fetch_pricing")
+
+#builder.add_conditional_edges("fetch_pricing", tools_condition)
+#builder.add_edge("tools", "fetch_pricing")
+
 builder.add_edge("fetch_pricing", "compare_quotes")
-builder.add_edge("compare_quotes", "request_approval")
-builder.add_edge("request_approval", "submit_purchase_order")
+
+builder.add_conditional_edges("compare_quotes", route_after_compare)
+
+#builder.add_edge("compare_quotes", "request_approval")
+#builder.add_edge("request_approval", "submit_purchase_order")
+
+builder.add_conditional_edges("request_approval", check_approval)
+
 builder.add_edge("submit_purchase_order", "notify_employee")
 builder.add_edge("notify_employee", END)
 
@@ -202,6 +256,7 @@ def run_first_invocation(graph):
 
     result = graph.invoke(
         {"request": "Order 50 laptops for the new engineering team"},
+        #{"request": "Order 20 laptops for the new engineering team"},
         config,
     )
 
@@ -245,6 +300,7 @@ def run_second_invocation(graph):
 
     result = graph.invoke(
         Command(resume="Approved — go ahead with the purchase."),
+        #Command(resume="Rejected — over budget"),
         config,
     )
 
