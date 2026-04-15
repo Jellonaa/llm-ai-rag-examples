@@ -83,7 +83,8 @@ search_query = "Who won the regatta last year"
 results = queryVectorDb(search_query)
 print("Results and scores (smaller distance is better)\n###########################################################")
 
-# Print the results
+# Print the results, zip documentation here: https://www.w3schools.com/python/ref_func_zip.asp
+# In short the zip function allows us to iterate over two lists in parallel, in this case the list of result documents and their corresponding distance scores.
 for doc, distance in zip(results['documents'][0], results['distances'][0]):
     print(f"Result document: {doc}")
     print(f"Score: {distance:.4f}\n")

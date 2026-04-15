@@ -78,7 +78,7 @@ CREATURES = [
         "type": "Sea Lurker",
         "habitat": "Coastal Waters",
         "size": "Gigantic",
-        "abilities": ["Tidal Pull", "Brine Spit", "Echo Roar"],
+        "abilities": ["Tidal Pull", "Brine Spit", "Turn enemy to water"],
         "diet": "Piscivore",
         "danger_level": 7,
         "description": "A massive eel-like creature with rows of bioluminescent teeth, known for capsizing fishing boats.",
@@ -130,7 +130,7 @@ class State(TypedDict):
 
 # ─── LLM ─────────────────────────────────────────────────────────────────────
 
-llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite-preview")
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
 str_parser = StrOutputParser()
 rewrite_chain = llm | str_parser
@@ -276,7 +276,10 @@ queries = [
     #"Which creature has the highest intelligence?"
     #"Is the Iron Basilisk dangerous to humans?"
     #"Are Mongrels dangerous to Saltmaws?"
-    "Is there any creature which can turn opponent in liquid?"
+    #"Is there any creature which can turn opponent in liquid?"
+    #"Onko otusta, joka voi hyökkäyksellä muuttaa vihulaisen nesteeksi, kaasuksi tai muuhun olomuotoon?"
+    #"Tykkään donatellosta ja rafaeollosta, oisko joku otus joka muistuttaa niitä?"
+    "Selviänkö adamantium haarniskalla kaikkia vastaan?"
 
 ]
 

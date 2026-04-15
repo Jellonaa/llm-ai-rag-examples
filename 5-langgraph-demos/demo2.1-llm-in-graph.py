@@ -10,12 +10,13 @@ class ChatState(TypedDict):
     messages: Annotated[list, add_messages] # APPEND reducer​ 
 
 def call_llm(state: ChatState) -> dict:
-    response = llm.invoke(state["messages"]) # pass message list​
+    response = llm.invoke(state["messages"]) # pass message list​. Note! The response type of invoke is an AIMessage, not a string
     return {"messages": [response]} # AIMessage appended​
 
 g = StateGraph(ChatState)
 g.add_node("call_llm", call_llm)
-g.add_edge(START, "call_llm"); g.add_edge("call_llm", END)
+g.add_edge(START, "call_llm"); 
+g.add_edge("call_llm", END)
 app = g.compile()
 
 result = app.invoke({"messages": [

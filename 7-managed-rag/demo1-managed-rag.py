@@ -22,14 +22,14 @@ SETUP (Azure Portal)
 ──────────────────────
 
 1. Create azure storage account
-2. Creating a container in the storage account
+2. Create a container in the storage account (from resource page: "Data storage" → "Containers" → "+ Add container")
 3. Open the documents container. Open container, click Upload and select at least one file to upload (it should be less than 16MB in size).
 4. Create an Azure AI Search resource, set "Free" pricing tier for testing.
 5. Go to https://ai.azure.com/ create a new Azure AI Foundry project 
 6. Go to your foundry project -> "Models + endpoints" -> "Deploy model" -> "Deploy base model" for embeddings and deploy it. You can use the "text-embedding-3-small" model for this demo.
 7. Deploy a GPT-4o-mini or gpt-5-mini model for generation by following the same process as above. Note the deployment name you choose, you'll need it in the .env file.
 8. Open your Azure AI Search resource -> "Import data (new)" → "Azure Blob Storage" → RAG -> connect to your storage account and select the container where you uploaded your documents.
-8.1 Choose "Kind" as "Microsoft Foundry", select the correct project foundry and model, which you have created. Then default options for rest and "Create". 
+8.1 Choose "Kind" (in the "Vectorize your text" phase) as "Microsoft Foundry", select the correct project foundry and model, which you have created. Then default options for rest and "Create". 
 9. After finishing 8.1 azure opens "Search explorer" view, where can test your search index. You can use the "Search" field to enter a query and see the retrieved chunks from your documents.
 10. Collect values for Python code, listed below, and add them to your .env file.
 11. Run the Python code in this demo to see managed RAG in action!
