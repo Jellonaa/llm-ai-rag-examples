@@ -30,7 +30,7 @@ if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not set")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.5-flash-lite")
+model = genai.GenerativeModel("gemma4-31b-it")
 
 app = FastAPI(title="LLM Chat API")
 
@@ -84,20 +84,6 @@ class ChatRequest(BaseModel):
     session_id: str = "default"
 
 
-def build_gemini_history(history: list[dict]) -> list[dict]:
-    """Convert frontend message format to the Gemini contents format.
-
-    Frontend uses:  {"role": "user"|"assistant", "content": "..."}
-    Gemini expects: {"role": "user"|"model",      "parts": [{"text": "..."}]}
-    """
-    return [
-        {
-            "role": "model" if msg["role"] == "assistant" else "user",
-            "parts": [{"text": msg["content"]}],
-        }
-        for msg in history
-    ]
-
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
@@ -116,7 +102,7 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again in a moment.")
 
     # Build the full conversation: history + new user message
-    contents = build_gemini_history(request.history) + [{"role": "user", "parts": [request.message]}]
+    contents = request.history + [{"role": "user", "parts": [request.message]}]
     response = model.generate_content(contents)
     usage = response.usage_metadata
 
@@ -147,7 +133,7 @@ async def chat_stream(request: ChatRequest):
 
     def generate():
         # Build the full conversation: history + new user message
-        contents = build_gemini_history(request.history) + [{"role": "user", "parts": [request.message]}]
+        contents = request.history + [{"role": "user", "parts": [request.message]}]
         response = model.generate_content(contents, stream=True)
         print(response)
 
