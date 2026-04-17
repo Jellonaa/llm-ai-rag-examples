@@ -8,7 +8,7 @@
  * 4. Token cost shows up after each response
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import ChatInput from './components/ChatInput'
 import MessageList from './components/MessageList'
 import UsageBar from './components/UsageBar'
@@ -24,20 +24,6 @@ export default function App() {
   const [streamingEnabled, setStreamingEnabled] = useState(true)
   const [lastUsage, setLastUsage] = useState(null)
   const [error, setError] = useState(null)
-  const messagesEndRef = useRef(null)
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  // Convert our message format → Gemini history format
-  // Gemini uses "model" not "assistant", and "parts" not "content"
-  function buildHistory(msgs) {
-    return msgs.map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }))
-  }
 
   async function sendMessage(text) {
     if (!text.trim() || isStreaming) return
@@ -48,9 +34,9 @@ export default function App() {
     setMessages(updatedMessages)
     setIsStreaming(true)
 
-    // History for the API is everything except the last user message
-    // (the last message is sent as `message`, not in `history`)
-    const history = buildHistory(messages)
+    // Pass history as-is — the backend converts it to the Gemini format.
+    // History is everything before the new user message.
+    const history = messages
 
     try {
       if (streamingEnabled) {
@@ -66,9 +52,10 @@ export default function App() {
   }
 
   // ── Streaming: fetch + ReadableStream ─────────────────────────────────────
-  // Why not EventSource? EventSource only supports GET. We need POST to send
-  // the message body. The fetch ReadableStream API gives us the same streaming
-  // behaviour with full control over the request.
+  // message        — the new user text to send
+  // history        — prior communication
+  // currentMessages — full React message list including the new user message,
+  //                   used to append the assistant reply at the correct index
   async function streamResponse(message, history, currentMessages) {
     const response = await fetch(`${API_BASE}/chat/stream`, {
       method: 'POST',
@@ -85,6 +72,8 @@ export default function App() {
     const assistantIndex = currentMessages.length
     setMessages([...currentMessages, { role: 'assistant', content: '' }])
 
+    // https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/getReader
+    // The getReader() method of the ReadableStream interface creates a reader and locks the stream to it. 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
@@ -104,9 +93,12 @@ export default function App() {
         if (!event.startsWith('data: ')) continue
         const data = JSON.parse(event.slice(6))
 
+        // data is one of:
+        //   { type: 'text', content: '<token(s)>' }
+        //   { type: 'done', usage: { input_tokens: 42, output_tokens: 9, estimated_cost_usd: 0.000008 } }
         if (data.type === 'text') {
           fullText += data.content
-          // Functional update to avoid stale closure over assistantIndex
+
           setMessages((prev) => {
             const updated = [...prev]
             updated[assistantIndex] = { role: 'assistant', content: fullText }
@@ -166,17 +158,13 @@ export default function App() {
         </div>
       </header>
 
+      <ChatInput onSend={sendMessage} disabled={isStreaming} />
+
       {lastUsage && <UsageBar usage={lastUsage} />}
 
-      {error && (
-        <div className="error-banner">
-          {error}
-        </div>
-      )}
+      {error && <div className="error-banner">{error}</div>}
 
-      <MessageList messages={messages} isStreaming={isStreaming} ref={messagesEndRef} />
-
-      <ChatInput onSend={sendMessage} disabled={isStreaming} />
+      <MessageList messages={messages} isStreaming={isStreaming} />
     </div>
   )
 }

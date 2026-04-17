@@ -27,10 +27,10 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not set — copy .env.example to .env and add your key")
+    raise ValueError("GEMINI_API_KEY not set")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.5-flash-lite")
+model = genai.GenerativeModel("gemma4-31b-it")
 
 app = FastAPI(title="LLM Chat API")
 
@@ -80,8 +80,9 @@ def estimate_cost(input_tokens: int, output_tokens: int) -> float:
 
 class ChatRequest(BaseModel):
     message: str
-    history: list[dict] = []   # [{"role": "user"|"model", "parts": ["..."]}]
+    history: list[dict] = []   # [{"role": "user"|"assistant", "content": "..."}]
     session_id: str = "default"
+
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -100,8 +101,9 @@ async def chat(request: ChatRequest):
     if not check_rate_limit(request.session_id):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again in a moment.")
 
-    chat_session = model.start_chat(history=request.history)
-    response = chat_session.send_message(request.message)
+    # Build the full conversation: history + new user message
+    contents = request.history + [{"role": "user", "parts": [request.message]}]
+    response = model.generate_content(contents)
     usage = response.usage_metadata
 
     return {
@@ -121,12 +123,6 @@ async def chat_stream(request: ChatRequest):
     """
     Streaming endpoint using Server-Sent Events (SSE).
 
-    Why SSE over WebSockets?
-    - Simpler: one-directional, built on HTTP, no handshake
-    - Works through proxies and firewalls that struggle with WebSockets
-    - Native browser support via EventSource (or fetch + ReadableStream)
-    - Perfect fit: client sends one message, server streams one response
-
     SSE wire format:
         data: {"type": "text", "content": "Hello"}\n\n
         data: {"type": "done", "usage": {...}}\n\n
@@ -136,9 +132,24 @@ async def chat_stream(request: ChatRequest):
         raise HTTPException(status_code=429, detail="Rate limit exceeded.")
 
     def generate():
-        chat_session = model.start_chat(history=request.history)
-        response = chat_session.send_message(request.message, stream=True)
+        # Build the full conversation: history + new user message
+        contents = request.history + [{"role": "user", "parts": [request.message]}]
+        response = model.generate_content(contents, stream=True)
+        print(response)
 
+        # Each chunk is a GenerateContentResponse with done=False until the last one.
+        # Structure of each chunk:
+        #   candidates[0].content.parts[0].text  — the token(s) generated in this chunk
+        #   usage_metadata.prompt_token_count     — input tokens (only reliable on the last chunk)
+        #   usage_metadata.candidates_token_count — output tokens so far
+        # chunk.text is a shorthand for candidates[0].content.parts[0].text
+        # See https://ai.google.dev/gemini-api/docs/text-generation# for details on the response structure.
+        # On each iteration it blocks until Gemini sends the next chunk. So   
+        # the loop:                                                                                                                                                                                  
+        #   1. Asks Gemini for the next chunk — blocks here until it arrives                                                                                           
+        #   2. If the chunk has text, yields it to the browser
+        #   3. Goes back to step 1                                                                                                                                     
+        # When Gemini signals it is done (no more chunks), the for loop exits naturally and execution continues to the usage_metadata and the final done event. 
         for chunk in response:
             if chunk.text:
                 event = json.dumps({"type": "text", "content": chunk.text})
